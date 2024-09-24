@@ -18,11 +18,12 @@ on:
 
 env:
   XCODE_VERSION: '15.4'
+  INTERNAL_PATCH_NUMBER: 999
 
 jobs:
   resolve-values:
     name: "Resolve values"
-    runs-on: macos-14
+    runs-on: ubuntu-latest
     outputs:
       build_variant: ${{ steps.calculate.outputs.variant }}
       build_version: ${{ steps.calculate.outputs.version }}
@@ -72,8 +73,8 @@ jobs:
           name: version-info
           path: version-info/version_info.json
 
-  build:
-    name: Build
+  build-public:
+    name: Build Public Apps
     needs: resolve-values
     uses: bitwarden/ios/.github/workflows/build.yml@main
     strategy:
@@ -85,3 +86,26 @@ jobs:
       build-number: ${{ needs.resolve-values.outputs.build_number }}
       xcode-version: ${{ env.XCODE_VERSION }}
     secrets: inherit
+
+  build-internal-beta:
+    name: Build Internal Beta
+    runs-on: macos-14
+    needs: resolve-values
+    steps:
+      - name: Set patch version for internal builds
+        id: fix-patch-version
+        run: |
+          version_name=${{ needs.resolve-values.outputs.build_version }}
+          internal_version_name="${version_name%.*}.${{ env.INTERNAL_PATCH_NUMBER }}"
+          echo "version_name=$internal_version_name" >> $GITHUB_OUTPUT
+          echo "::warning::Internal version name: $internal_version_name"
+
+      - name: Build
+        uses: bitwarden/ios/.github/workflows/build.yml@main
+        with:
+          build-variant: Beta
+          build-version: ${{ steps.fix-patch-version.outputs.version_name }}
+          build-number: ${{ needs.resolve-values.outputs.build_number }}
+          xcode-version: ${{ env.XCODE_VERSION }}
+          compiler-flags: "DEBUG_MENU"
+        secrets: inherit
